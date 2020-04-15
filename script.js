@@ -17,11 +17,10 @@ let _token = hash.access_token;
 const authEndpoint = 'https://accounts.spotify.com/authorize';
 
 // Replace with your app's client ID, redirect URI and desired scopes
-const clientId = 'bad9e04cf07e4ac89c75a71999f18955';
-const redirectUri = 'https://spotify-web-playback-async.glitch.me';
+const clientId = 'c13e894a551a465fa23ab11a03e3d823';
+const redirectUri = 'http://localhost:5000';
 const scopes = [
   'streaming',
-  'user-read-birthdate',
   'user-read-private',
   'user-modify-playback-state'
 ];
@@ -31,134 +30,55 @@ if (!_token) {
   window.location = `${authEndpoint}?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes.join('%20')}&response_type=token&show_dialog=true`;
 }
 
-// We don't need this
-window.onSpotifyWebPlaybackSDKReady = () => {};
+// Set up the Web Playback SDK
 
-// async methods
-async function waitForSpotifyWebPlaybackSDKToLoad () {
-  return new Promise((resolve) => {
-    const interval = setInterval(() => {
-      if ('Spotify' in window) {
-        resolve(window.Spotify);
-        clearInterval(interval);
-      }
-    });
+window.onSpotifyPlayerAPIReady = () => {
+  const player = new Spotify.Player({
+    name: 'Web Playback SDK Template',
+    getOAuthToken: cb => { cb(_token); }
   });
-};
 
-async function waitUntilUserHasSelectedPlayer (sdk) {
-  return new Promise((resolve) => {
-    let interval = setInterval(async () => {
-      let state = await sdk.getCurrentState();
-      if (state !== null) {
-        resolve();
-        clearInterval(interval);
-      }
-    });
+  // Error handling
+  player.on('initialization_error', e => console.error(e));
+  player.on('authentication_error', e => console.error(e));
+  player.on('account_error', e => console.error(e));
+  player.on('playback_error', e => console.error(e));
+
+  // Playback status updates
+  player.on('player_state_changed', state => {
+    console.log(state)
+    $('#current-track').attr('src', state.track_window.current_track.album.images[0].url);
+    $('#current-track-name').text(state.track_window.current_track.name);
   });
-};
+
+  // Ready
+  player.on('ready', data => {
+    console.log('Ready with Device ID', data.device_id);
+    
+    // Play a track using our new device ID
+    play(data.device_id);
+  });
+
+  // Connect to the player!
+  player.connect();
+
+  $('#button').on('click',()=>{
+    console.log('sseeeeeeekkkkk')
+    player.seek(60000)
+  })
+}
+
 
 
 // Play a specified track on the Web Playback SDK's device ID
-async function play (device_id) {
-  return new Promise((resolve) => {
-    fetch(`https://api.spotify.com/v1/me/player/play?device_id=${device_id}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        uris: ["spotify:track:2CdSEaR5Co8vJYT0xrUwFn"]
-      }),
-      headers: {
-        Authorization: `Bearer ${_token}`
-      }
-    }).then(resolve);
+function play(device_id) {
+  $.ajax({
+   url: "https://api.spotify.com/v1/me/player/play?device_id=" + device_id,
+   type: "PUT",
+   data: '{"uris": ["spotify:track:5ya2gsaIhTkAuWYEMB0nw5"]}',
+   beforeSend: function(xhr){xhr.setRequestHeader('Authorization', 'Bearer ' + _token );},
+   success: function(data) { 
+     console.log(data)
+   }
   });
 }
-
-window.onSpotifyWebPlaybackSDKReady = () => {};
-
-async function waitForSpotifyWebPlaybackSDKToLoad () {
-  return new Promise(resolve => {
-    if (window.Spotify) {
-      resolve(window.Spotify);
-    } else {
-      window.onSpotifyWebPlaybackSDKReady = () => {
-        resolve(window.Spotify);
-      };
-    }
-  });
-};
-
-async function waitUntilUserHasSelectedPlayer (sdk) {
-  return new Promise(resolve => {
-    let interval = setInterval(async () => {
-      let state = await sdk.getCurrentState();
-      if (state !== null) {
-        resolve(state);
-        clearInterval(interval);
-      }
-    });
-  });
-};
-
-(async () => {
-  const { Player } = await waitForSpotifyWebPlaybackSDKToLoad();
-  
-  const sdk = new Player({
-    name: "Web Playback SDK async-await Template",
-    volume: 1.0,
-    getOAuthToken: callback => { callback(_token); }
-  });
-  
-  // Playback state has changed
-  sdk.on("player_state_changed", state => {
-    let {
-      name: track_name,
-      album: {
-        images: [{ url: artwork_url }]
-      }
-    } = state.track_window.current_track;
-    
-    console.log(state);
-    $('#current-track').attr('src', artwork_url);
-    $('#current-track-name').text(track_name);
-  });
-  
-  // Ready
-  sdk.on('ready', data => {
-    let { device_id } = data;
-    
-    // Play a track using our new device ID
-    console.log('Ready with Device ID', device_id);
-    play(device_id);
-  });
-  
-  let connected = await sdk.connect();
-  if (connected) {
-    console.log("Waiting for player to be selected ...");
-    let state = await waitUntilUserHasSelectedPlayer(sdk);
-    console.log("Player has been selected!");
-    
-    await sdk.resume();
-    await sdk.setVolume(0.5);
-    await sdk.seek(60 * 1000).then(() => {
-      console.log('Changed position!');
-    });
-    
-    let {
-      id,
-      uri: track_uri,
-      name: track_name,
-      duration_ms,
-      artists,
-      album: {
-        name: album_name,
-        uri: album_uri,
-        images: album_images
-      }
-    } = state.track_window.current_track;
-    
-    console.log(`You're listening to ${track_name} by ${artists[0].name}!`);
-  } else {
-    console.error("Failed to connect Player");
-  }
-})();
